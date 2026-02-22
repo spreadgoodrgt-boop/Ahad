@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="appTitle">Ahad — Surah Al-Mulk</title>
+
+  <!-- UI & Script Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:ital,wght@0,400;0,700;1,400&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Noto+Nastaliq+Urdu:wght@400;600&family=Tiro+Devanagari+Hindi:ital@0;1&display=swap" rel="stylesheet" />
+  <!--
+    KFGQPC Uthmanic Script HAFS — official Madinah Mushaf typeface.
+    If the gov.sa CDN is unreachable, Amiri Quran loads as fallback (already above).
+  -->
+  <link rel="preconnect" href="https://fonts.qurancomplex.gov.sa" crossorigin />
+  <link href="https://fonts.qurancomplex.gov.sa/css/QCF_P020_v1.css" rel="stylesheet" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+
+  <!-- marked.js — renders tafsir Markdown -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+
+  <!-- Firebase SDKs (compat v9 — works without a bundler) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+  <!-- Ambient Background -->
+  <canvas id="starCanvas"></canvas>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <!-- ═══ LANGUAGE PICKER OVERLAY ═══ -->
+  <div id="langOverlay" class="overlay" role="dialog" aria-modal="true" aria-label="Language Selection">
+    <div class="overlay-inner">
+      <div class="overlay-moon animate-float">🌙</div>
+      <p class="overlay-bismillah arabic-quran">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</p>
+      <h2 class="overlay-title">Choose Your Study Language</h2>
+      <p class="overlay-sub">You can change this anytime from the top bar</p>
+      <div class="lang-choices">
+        <button class="lang-choice-btn" onclick="App.setLang('en')" aria-label="English">
+          <span class="lang-flag">🇬🇧</span>
+          <span class="lang-name">English</span>
+          <span class="lang-script">Roman Script</span>
+        </button>
+        <button class="lang-choice-btn" onclick="App.setLang('hi')" aria-label="Hindi">
+          <span class="lang-flag">🇮🇳</span>
+          <span class="lang-name">हिंदी</span>
+          <span class="lang-script">देवनागरी</span>
+        </button>
+        <button class="lang-choice-btn" onclick="App.setLang('ur')" aria-label="Urdu">
+          <span class="lang-flag">🇵🇰</span>
+          <span class="lang-name">اردو</span>
+          <span class="lang-script">نستعلیق</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ GRAMMAR POPUP ═══ -->
+  <div id="grammarPopup" class="grammar-popup hidden" role="dialog" aria-modal="true">
+    <div class="grammar-popup-inner">
+      <button class="grammar-close" onclick="Grammar.close()" aria-label="Close">✕</button>
+      <div id="grammarContent"></div>
+    </div>
+  </div>
+  <div id="grammarBackdrop" class="grammar-backdrop hidden" onclick="Grammar.close()"></div>
+
+  <!-- ═══ IRAB DIAGRAM POPUP ═══ -->
+  <div id="irabPopup" class="irab-popup hidden" role="dialog" aria-modal="true">
+    <div class="irab-popup-inner">
+      <div class="irab-popup-header">
+        <h3 class="irab-title" data-i18n="irabTitle">Sentence Analysis (I'rāb)</h3>
+        <button class="grammar-close" onclick="Grammar.closeIrab()" aria-label="Close">✕</button>
+      </div>
+      <div id="irabContent"></div>
+    </div>
+  </div>
+  <div id="irabBackdrop" class="grammar-backdrop hidden" onclick="Grammar.closeIrab()"></div>
+
+  <!-- ═══ TOAST ═══ -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- ═══ MAIN APP ═══ -->
+  <div class="app-wrap">
+
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-brand">
+        <span class="topbar-icon">📖</span>
+        <span class="topbar-name" data-i18n="appShort">Ahad</span>
+      </div>
+      <div class="topbar-controls">
+
+        <!-- Theme Toggle -->
+        <button
+          id="themeToggleBtn"
+          class="theme-toggle-btn"
+          onclick="App.toggleTheme()"
+          title="Toggle light/dark mode"
+          aria-label="Toggle theme"
+        >☀️</button>
+
+        <!-- Language Toggle -->
+        <div class="lang-toggle" role="group" aria-label="Language">
+          <button class="lang-btn active" data-lang="en" onclick="App.changeLang('en')">EN</button>
+          <button class="lang-btn" data-lang="hi" onclick="App.changeLang('hi')">हि</button>
+          <button class="lang-btn" data-lang="ur" onclick="App.changeLang('ur')">اُر</button>
+        </div>
+
+        <!-- User Badge -->
+        <div class="user-badge hidden" id="userBadge">
+          <div class="user-avatar" id="userAvatar">A</div>
+          <span class="user-name" id="userName">User</span>
+          <button class="user-logout-btn" onclick="App.logout()" title="Log out" aria-label="Log out">⏏</button>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- Surah Header -->
+    <div class="surah-header">
+      <div class="surah-number-ring">
+        <span>67</span>
+      </div>
+      <h1 class="surah-arabic-title arabic-quran">سُورَةُ ٱلْمُلْك</h1>
+      <p class="surah-latin-title" data-i18n="surahName">Surah Al-Mulk</p>
+      <p class="surah-meaning" data-i18n="surahMeaning">The Sovereignty · The Kingdom</p>
+      <div class="surah-pills">
+        <span class="pill">Juz <strong>29</strong></span>
+        <span class="pill"><strong>30</strong> <span data-i18n="ayahs">Ayaat</span></span>
+        <span class="pill" data-i18n="makki">Makki</span>
+        <span class="pill"><span data-i18n="alsoKnown">Also:</span> <strong data-i18n="alWaqiya">Al-Wāqiya</strong></span>
+      </div>
+    </div>
+
+    <!-- Bismillah -->
+    <div class="bismillah-card">
+      <p class="bismillah-arabic arabic-quran">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</p>
+      <p class="bismillah-trans" data-i18n="bismillah">In the name of Allah, the Most Gracious, the Most Merciful</p>
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingState" class="loading-state">
+      <span class="loading-moon animate-float">🌙</span>
+      <p class="loading-text" data-i18n="loading">Loading Surah Al-Mulk<span class="loading-dots"></span></p>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="hidden">
+
+      <!-- Mode Tabs + Audio -->
+      <nav class="mode-nav" role="tablist">
+        <button class="mode-tab active" id="tab-study" role="tab" aria-selected="true"
+          onclick="App.switchMode('study')" data-i18n-tab="study">
+          <span class="tab-icon">📖</span><span class="tab-label" data-i18n="tabStudy">Study</span>
+        </button>
+        <button class="mode-tab" id="tab-flashcard" role="tab" aria-selected="false"
+          onclick="App.switchMode('flashcard')" data-i18n-tab="flashcard">
+          <span class="tab-icon">🃏</span><span class="tab-label" data-i18n="tabFlashcard">Flashcards</span>
+        </button>
+        <button class="mode-tab" id="tab-quiz" role="tab" aria-selected="false"
+          onclick="App.switchMode('quiz')" data-i18n-tab="quiz">
+          <span class="tab-icon">❓</span><span class="tab-label" data-i18n="tabQuiz">Quiz</span>
+        </button>
+      </nav>
+
+      <!-- Audio Player -->
+      <div class="audio-player" id="audioPlayer">
+        <div class="audio-qari">
+          <div class="qari-avatar">🎙️</div>
+          <div class="qari-info">
+            <div class="qari-name">Mishary Rashid Alafasy</div>
+            <div class="qari-label" id="audioAyahLabel" data-i18n="fullSurah">Full Surah</div>
+          </div>
+        </div>
+        <div class="audio-controls">
+          <button class="audio-btn" onclick="Audio.prev()" aria-label="Previous Ayah">⏮</button>
+          <button class="audio-btn audio-play" onclick="Audio.toggle()" id="playBtn" aria-label="Play/Pause">▶</button>
+          <button class="audio-btn" onclick="Audio.next()" aria-label="Next Ayah">⏭</button>
+        </div>
+        <div class="audio-progress-wrap">
+          <div class="audio-progress-bar" id="progressBar" onclick="Audio.seek(event)" role="progressbar">
+            <div class="audio-progress-fill" id="progressFill"></div>
+          </div>
+          <div class="audio-time">
+            <span id="currentTime">0:00</span>
+            <span id="durationTime">0:00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STUDY MODE ── -->
+      <section id="studyMode" role="tabpanel">
+        <div id="ayahList"></div>
+      </section>
+
+      <!-- ── FLASHCARD MODE ── -->
+      <section id="flashcardMode" class="hidden" role="tabpanel">
+        <div class="fc-progress" id="fcProgress">
+          <span data-i18n="card">Card</span> <span id="fcCurrent">1</span> / <span id="fcTotal">30</span>
+        </div>
+        <div class="flashcard-wrap">
+          <div class="flashcard" id="flashcard" onclick="Modes.flipCard()" tabindex="0"
+            onkeydown="if(event.key==='Enter')Modes.flipCard()">
+            <div id="flashcardInner" class="flashcard-inner"></div>
+          </div>
+        </div>
+        <div class="fc-nav">
+          <button class="fc-btn" onclick="Modes.fcNav(-1)" data-i18n="prev">← Prev</button>
+          <button class="fc-btn fc-flip" onclick="Modes.flipCard()" data-i18n="flip">Flip</button>
+          <button class="fc-btn" onclick="Modes.fcNav(1)" data-i18n="next">Next →</button>
+        </div>
+      </section>
+
+      <!-- ── QUIZ MODE ── -->
+      <section id="quizMode" class="hidden" role="tabpanel">
+        <div class="quiz-progress-bar">
+          <div class="quiz-progress-fill" id="quizProgressFill"></div>
+        </div>
+        <div id="quizContent"></div>
+      </section>
+
+    </div><!-- /mainContent -->
+  </div><!-- /app-wrap -->
+
+  <!-- Hidden audio element -->
+  <audio id="mainAudio"></audio>
+
+  <!-- Scripts (order matters) -->
+  <script src="data/grammar.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/firebase.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/grammar.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/modes.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
